@@ -10,15 +10,17 @@ function App() {
   const [projectName, setProjectName] = useState("");
   const [error, setError] = useState("");
   const [storageWarning, setStorageWarning] = useState(false);
-  const hasMounted = useRef(false);
+  const hasUserChangedProjects = useRef(false);
 
   useEffect(() => {
-    if (!hasMounted.current) {
-      hasMounted.current = true;
-      return;
-    }
+    if (!hasUserChangedProjects.current) return;
     setStorageWarning(!saveProjects(projects));
   }, [projects]);
+
+  const updateProjects = (update: (current: Project[]) => Project[]) => {
+    hasUserChangedProjects.current = true;
+    setProjects(update);
+  };
 
   const addProject = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -27,13 +29,16 @@ function App() {
       setError("Enter a project name.");
       return;
     }
-    setProjects((current) => [...current, { id: createId(), name, tasks: [] }]);
+    updateProjects((current) => [
+      ...current,
+      { id: createId(), name, tasks: [] },
+    ]);
     setProjectName("");
     setError("");
   };
 
   const addTask = (projectId: string, name: string) => {
-    setProjects((current) =>
+    updateProjects((current) =>
       current.map((project) =>
         project.id === projectId
           ? {
@@ -49,7 +54,7 @@ function App() {
   };
 
   const toggleTask = (projectId: string, taskId: string) => {
-    setProjects((current) =>
+    updateProjects((current) =>
       current.map((project) =>
         project.id === projectId
           ? {
@@ -66,7 +71,7 @@ function App() {
   };
 
   const deleteTask = (projectId: string, taskId: string) => {
-    setProjects((current) =>
+    updateProjects((current) =>
       current.map((project) =>
         project.id === projectId
           ? {
@@ -79,7 +84,7 @@ function App() {
   };
 
   const deleteProject = (projectId: string) => {
-    setProjects((current) =>
+    updateProjects((current) =>
       current.filter((project) => project.id !== projectId),
     );
   };

@@ -9,7 +9,9 @@ npm install
 npm run dev
 ```
 
-Open the local URL shown by Vite (normally `http://localhost:5173`).
+Always open `http://127.0.0.1:5173/`. The development server is configured to
+use that host and port, and it will fail clearly if port 5173 is unavailable
+instead of silently selecting a different origin.
 
 ## Quality checks
 
@@ -31,4 +33,12 @@ npm run build
 
 ## Persistence
 
-Projects and tasks are stored in the browser's `localStorage` under a versioned key. Data is restored on the next visit, malformed entries are ignored safely, and clearing all projects stays cleared. If storage is unavailable, the current session continues to work and displays a non-blocking warning.
+Projects and tasks are stored in the browser's `localStorage` under the stable
+key `progress-tracker:projects`. Data is restored on the next visit, older
+supported data is migrated, malformed entries are ignored safely, and deleting
+all projects stays deleted. If storage is unavailable, the current session
+continues to work and displays a non-blocking warning.
+
+Browser storage is specific to the exact origin and browser context. Always use
+`http://127.0.0.1:5173/`; data does not automatically transfer to `localhost`,
+another port, another browser profile, or a private-browsing session.
