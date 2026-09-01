@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { ProjectCard } from "./components/ProjectCard";
 import { PlusIcon } from "./components/Icons";
+import { OverallProgress } from "./components/OverallProgress";
 import { createId } from "./id";
 import { loadProjects, saveProjects } from "./storage";
 import type { Project } from "./types";
@@ -10,6 +11,10 @@ function App() {
   const [projectName, setProjectName] = useState("");
   const [error, setError] = useState("");
   const [storageWarning, setStorageWarning] = useState(false);
+  const [expandedProjectId, setExpandedProjectId] = useState<string | null>(
+    null,
+  );
+  const [focusTaskInputId, setFocusTaskInputId] = useState<string | null>(null);
   const hasUserChangedProjects = useRef(false);
 
   useEffect(() => {
@@ -29,10 +34,13 @@ function App() {
       setError("Enter a project name.");
       return;
     }
+    const projectId = createId();
     updateProjects((current) => [
       ...current,
-      { id: createId(), name, tasks: [] },
+      { id: projectId, name, tasks: [] },
     ]);
+    setExpandedProjectId(projectId);
+    setFocusTaskInputId(projectId);
     setProjectName("");
     setError("");
   };
@@ -87,6 +95,8 @@ function App() {
     updateProjects((current) =>
       current.filter((project) => project.id !== projectId),
     );
+    setExpandedProjectId((current) => (current === projectId ? null : current));
+    setFocusTaskInputId((current) => (current === projectId ? null : current));
   };
 
   return (
@@ -115,7 +125,12 @@ function App() {
               aria-describedby={error ? "project-error" : undefined}
               aria-invalid={Boolean(error)}
             />
-            <button type="submit" className="primary-button">
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={!projectName.trim()}
+              title="Add project"
+            >
               <PlusIcon />
               <span>Add project</span>
             </button>
@@ -134,6 +149,8 @@ function App() {
           later.
         </p>
       )}
+
+      <OverallProgress projects={projects} />
 
       {projects.length === 0 ? (
         <section className="empty-state" aria-labelledby="empty-title">
@@ -155,6 +172,14 @@ function App() {
               key={project.id}
               project={project}
               index={index}
+              isExpanded={expandedProjectId === project.id}
+              shouldFocusTaskInput={focusTaskInputId === project.id}
+              onToggleExpanded={() =>
+                setExpandedProjectId((current) =>
+                  current === project.id ? null : project.id,
+                )
+              }
+              onTaskInputFocused={() => setFocusTaskInputId(null)}
               onAddTask={addTask}
               onToggleTask={toggleTask}
               onDeleteTask={deleteTask}

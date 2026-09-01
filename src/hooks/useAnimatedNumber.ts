@@ -14,7 +14,7 @@ export function useAnimatedNumber(target: number): number {
     const start = displayedRef.current;
     const difference = target - start;
     const startedAt = performance.now();
-    const duration = 420;
+    const duration = 220;
     let frame = 0;
 
     const animate = (now: number) => {

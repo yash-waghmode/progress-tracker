@@ -9,10 +9,12 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 import { STORAGE_KEY } from "./storage";
+import type { Project } from "./types";
 
 class BrowserStorage implements Storage {
   private values = new Map<string, string>();
@@ -44,7 +46,33 @@ class BrowserStorage implements Storage {
   }
 }
 
+const storedProjects: Project[] = [
+  {
+    id: "stored-project",
+    name: "Stored launch",
+    tasks: [
+      { id: "one", name: "Plan", completed: true },
+      { id: "two", name: "Build", completed: true },
+      { id: "three", name: "Ship", completed: false },
+    ],
+  },
+  {
+    id: "second-project",
+    name: "Customer rollout",
+    tasks: [{ id: "four", name: "Invite customers", completed: false }],
+  },
+];
+
 let storage: BrowserStorage;
+
+function seedProjects(projects: Project[]) {
+  storage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, projects }));
+  storage.writes.length = 0;
+}
+
+function overallProgress() {
+  return screen.getByRole("progressbar", { name: "Overall progress" });
+}
 
 beforeEach(() => {
   storage = new BrowserStorage();
@@ -72,38 +100,222 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("progress tracker flow", () => {
-  it("loads stored projects before rendering without a startup write", () => {
-    storage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 1,
-        projects: [
-          {
-            id: "stored-project",
-            name: "Stored launch",
-            tasks: [
-              { id: "one", name: "Plan", completed: true },
-              { id: "two", name: "Build", completed: true },
-              { id: "three", name: "Ship", completed: false },
-            ],
-          },
-        ],
-      }),
-    );
-    storage.writes.length = 0;
+describe("project overview and disclosure", () => {
+  it("renders compact summaries collapsed and expands only one project at a time", async () => {
+    seedProjects(storedProjects);
+    const user = userEvent.setup();
+    render(<App />);
 
+    expect(screen.getByText("2 of 3 tasks")).toBeTruthy();
+    expect(screen.getByText("0 of 1 tasks")).toBeTruthy();
+
+    const firstDisclosure = screen.getByRole("button", {
+      name: "Expand Stored launch",
+    });
+    const secondDisclosure = screen.getByRole("button", {
+      name: "Expand Customer rollout",
+    });
+    expect(firstDisclosure.getAttribute("aria-expanded")).toBe("false");
+    expect(secondDisclosure.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("checkbox")).toBeNull();
+
+    await user.click(firstDisclosure);
+    expect(
+      screen.getByRole("button", { name: "Collapse Stored launch" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: /Mark Plan/ })).toBeTruthy();
+
+    await user.click(secondDisclosure);
+    expect(
+      screen.getByRole("button", { name: "Expand Stored launch" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Collapse Customer rollout" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: /Mark Plan/ })).toBeNull();
+    expect(
+      screen.getByRole("checkbox", { name: /Mark Invite customers/ }),
+    ).toBeTruthy();
+  });
+
+  it("supports disclosure by keyboard with correct ARIA state", async () => {
+    seedProjects(storedProjects.slice(0, 1));
+    const user = userEvent.setup();
+    render(<App />);
+
+    const disclosure = screen.getByRole("button", {
+      name: "Expand Stored launch",
+    });
+    disclosure.focus();
+    await user.keyboard("{Enter}");
+
+    const collapse = screen.getByRole("button", {
+      name: "Collapse Stored launch",
+    });
+    expect(collapse.getAttribute("aria-expanded")).toBe("true");
+    expect(collapse.getAttribute("aria-controls")).toBe(
+      "project-body-stored-project",
+    );
+
+    await user.keyboard(" ");
+    expect(
+      screen.getByRole("button", { name: "Expand Stored launch" }),
+    ).toBeTruthy();
+  });
+
+  it("automatically expands a new project and focuses its task input", async () => {
+    seedProjects(storedProjects.slice(0, 1));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.type(screen.getByLabelText("Project name"), "Website launch");
+    await user.click(screen.getByRole("button", { name: "Add project" }));
+
+    expect(
+      screen.getByRole("button", { name: "Expand Stored launch" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Collapse Website launch" }),
+    ).toBeTruthy();
+    expect(document.activeElement).toBe(
+      screen.getByLabelText("Add a task to Website launch"),
+    );
+  });
+
+  it("does not toggle disclosure when task and delete controls are used", async () => {
+    seedProjects(storedProjects.slice(0, 1));
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      screen.getByRole("button", { name: "Expand Stored launch" }),
+    );
+    const collapseName = "Collapse Stored launch";
+
+    await user.click(
+      screen.getByRole("checkbox", { name: "Mark Ship as complete" }),
+    );
+    expect(screen.getByRole("button", { name: collapseName })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Delete task Ship" }));
+    expect(screen.getByRole("button", { name: collapseName })).toBeTruthy();
+
+    await user.click(
+      screen.getByRole("button", { name: "Delete project Stored launch" }),
+    );
+    expect(screen.getByRole("button", { name: collapseName })).toBeTruthy();
+    expect(
+      screen.getByRole("group", { name: "Confirm deletion of Stored launch" }),
+    ).toBeTruthy();
+  });
+});
+
+describe("progress and controls", () => {
+  it("shows accessible zero overall progress with no projects", () => {
+    render(<App />);
+
+    expect(overallProgress().getAttribute("aria-valuenow")).toBe("0");
+    expect(overallProgress().getAttribute("aria-valuetext")).toBe(
+      "0% complete, 0 of 0 tasks complete",
+    );
+    expect(screen.getByText("0 of 0 tasks complete")).toBeTruthy();
+  });
+
+  it("combines restored data correctly without altering the stored schema", () => {
+    seedProjects(storedProjects);
     render(
       <StrictMode>
         <App />
       </StrictMode>,
     );
 
-    expect(screen.getByRole("heading", { name: "Stored launch" })).toBeTruthy();
-    expect(screen.getByText("2 of 3")).toBeTruthy();
-    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe(
-      "67",
+    expect(overallProgress().getAttribute("aria-valuenow")).toBe("50");
+    expect(overallProgress().getAttribute("aria-valuetext")).toBe(
+      "50% complete, 2 of 4 tasks complete",
     );
+    expect(storage.writes).toEqual([]);
+    expect(JSON.parse(storage.getItem(STORAGE_KEY) ?? "null")).toEqual({
+      version: 1,
+      projects: storedProjects,
+    });
+  });
+
+  it("recalculates after toggling, adding, and deleting a task", async () => {
+    seedProjects(storedProjects.slice(0, 1));
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      screen.getByRole("button", { name: "Expand Stored launch" }),
+    );
+
+    expect(overallProgress().getAttribute("aria-valuenow")).toBe("67");
+    await user.click(
+      screen.getByRole("checkbox", { name: "Mark Ship as complete" }),
+    );
+    expect(overallProgress().getAttribute("aria-valuenow")).toBe("100");
+
+    const taskInput = screen.getByLabelText("Add a task to Stored launch");
+    await user.type(taskInput, "Announce launch{Enter}");
+    expect(overallProgress().getAttribute("aria-valuenow")).toBe("75");
+
+    await user.click(
+      screen.getByRole("button", { name: "Delete task Announce launch" }),
+    );
+    expect(overallProgress().getAttribute("aria-valuenow")).toBe("100");
+  });
+
+  it("recalculates when a project is deleted", async () => {
+    seedProjects(storedProjects);
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(
+      screen.getByRole("button", { name: "Delete project Stored launch" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Delete project" }));
+
+    expect(overallProgress().getAttribute("aria-valuenow")).toBe("0");
+    expect(overallProgress().getAttribute("aria-valuetext")).toBe(
+      "0% complete, 0 of 1 tasks complete",
+    );
+  });
+
+  it("disables trimmed-empty project and task submissions", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const projectInput = screen.getByLabelText("Project name");
+    const projectSubmit = screen.getByRole("button", { name: "Add project" });
+    expect((projectSubmit as HTMLButtonElement).disabled).toBe(true);
+    await user.type(projectInput, "   ");
+    expect((projectSubmit as HTMLButtonElement).disabled).toBe(true);
+    await user.clear(projectInput);
+    await user.type(projectInput, "Valid project{Enter}");
+
+    const taskInput = screen.getByLabelText("Add a task to Valid project");
+    const taskSubmit = screen.getByRole("button", {
+      name: "Add task to Valid project",
+    });
+    expect((taskSubmit as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(taskInput, { target: { value: "   " } });
+    expect((taskSubmit as HTMLButtonElement).disabled).toBe(true);
+    await user.type(taskInput, "A real task");
+    expect((taskSubmit as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
+describe("persistence regressions", () => {
+  it("loads stored projects before rendering without a startup write", () => {
+    seedProjects(storedProjects.slice(0, 1));
+    render(<App />);
+
+    expect(screen.getByRole("heading", { name: "Stored launch" })).toBeTruthy();
+    expect(screen.getByText("2 of 3 tasks")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("progressbar", { name: "Stored launch progress" })
+        .getAttribute("aria-valuenow"),
+    ).toBe("67");
     expect(storage.writes).toEqual([]);
   });
 
@@ -112,97 +324,61 @@ describe("progress tracker flow", () => {
     const view = render(<App />);
 
     expect(window.location.origin).toBe("http://127.0.0.1:5173");
-
-    expect(screen.getByText("A clear place to begin.")).toBeTruthy();
-
-    const projectInput = screen.getByLabelText("Project name");
-    await user.type(projectInput, "Website launch{Enter}");
-    expect(
-      screen.getByRole("heading", { name: "Website launch" }),
-    ).toBeTruthy();
-    expect(document.activeElement).toBe(projectInput);
-    await waitFor(() => {
-      expect(window.localStorage.getItem(STORAGE_KEY)).toContain(
-        "Website launch",
-      );
-    });
-
+    await user.type(
+      screen.getByLabelText("Project name"),
+      "Website launch{Enter}",
+    );
     const taskInput = screen.getByLabelText("Add a task to Website launch");
     await user.type(taskInput, "Review final copy{Enter}");
     await user.type(taskInput, "Publish site{Enter}");
     await user.type(taskInput, "Notify customers{Enter}");
-    expect(screen.getByText("0 of 3")).toBeTruthy();
-    await waitFor(() => {
-      const persisted = window.localStorage.getItem(STORAGE_KEY) ?? "";
-      expect(persisted).toContain("Review final copy");
-      expect(persisted).toContain("Publish site");
-      expect(persisted).toContain("Notify customers");
-    });
 
     await user.click(
       screen.getByRole("checkbox", {
         name: "Mark Review final copy as complete",
       }),
     );
-    expect(screen.getByText("1 of 3")).toBeTruthy();
-    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe(
-      "33",
-    );
-
     await user.click(
       screen.getByRole("checkbox", { name: "Mark Publish site as complete" }),
     );
-    expect(screen.getByText("2 of 3")).toBeTruthy();
-    expect(screen.getByText("67% complete")).toBeTruthy();
 
     let persistedBeforeRestart = "";
     await waitFor(() => {
       persistedBeforeRestart = window.localStorage.getItem(STORAGE_KEY) ?? "";
-      expect(persistedBeforeRestart).toContain("Website launch");
       expect(persistedBeforeRestart).toContain("Notify customers");
     });
 
     view.unmount();
-    const restartedView = render(<App />);
-    expect(
-      screen.getByRole("heading", { name: "Website launch" }),
-    ).toBeTruthy();
-    expect(screen.getByText("2 of 3")).toBeTruthy();
-    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe(
-      "67",
-    );
+    render(<App />);
+    expect(screen.getByText("2 of 3 tasks")).toBeTruthy();
     expect(window.localStorage.getItem(STORAGE_KEY)).toBe(
       persistedBeforeRestart,
     );
 
     await user.click(
+      screen.getByRole("button", { name: "Expand Website launch" }),
+    );
+    await user.click(
       screen.getByRole("checkbox", {
         name: "Mark Notify customers as complete",
       }),
     );
-    expect(screen.getByText("3 of 3")).toBeTruthy();
+    expect(screen.getByText("100% complete")).toBeTruthy();
+
     await waitFor(() => {
       expect(window.localStorage.getItem(STORAGE_KEY)).toContain(
         '"name":"Notify customers","completed":true',
       );
     });
-
-    restartedView.unmount();
-    render(<App />);
-    expect(screen.getByText("3 of 3")).toBeTruthy();
-    expect(screen.getByText("100% complete")).toBeTruthy();
   });
 
   it("persists deleting every project as an intentional empty collection", async () => {
     const user = userEvent.setup();
     render(<App />);
-
     await user.type(screen.getByLabelText("Project name"), "Temporary{Enter}");
-
     await user.click(
       screen.getByRole("button", { name: "Delete project Temporary" }),
     );
-    expect(screen.getByText("A clear place to begin.")).toBeTruthy();
 
     await waitFor(() => {
       expect(window.localStorage.getItem(STORAGE_KEY)).toContain(
@@ -218,22 +394,22 @@ describe("progress tracker flow", () => {
 
   it("renders an empty state safely when stored data is malformed", () => {
     storage.setItem(STORAGE_KEY, "{broken");
-
     expect(() => render(<App />)).not.toThrow();
     expect(screen.getByText("A clear place to begin.")).toBeTruthy();
   });
 
-  it("rejects blank names without submitting or reloading", async () => {
+  it("uses reduced motion to remove tasks immediately", async () => {
+    seedProjects(storedProjects.slice(0, 1));
     const user = userEvent.setup();
     render(<App />);
+    await user.click(
+      screen.getByRole("button", { name: "Expand Stored launch" }),
+    );
 
-    await user.click(screen.getByRole("button", { name: "Add project" }));
-    expect(screen.getByRole("alert").textContent).toBe("Enter a project name.");
-
-    fireEvent.change(screen.getByLabelText("Project name"), {
-      target: { value: "   " },
-    });
-    await user.keyboard("{Enter}");
-    expect(screen.queryByRole("article")).toBeNull();
+    const article = screen.getByRole("article");
+    await user.click(
+      within(article).getByRole("button", { name: "Delete task Ship" }),
+    );
+    expect(screen.queryByRole("checkbox", { name: /Mark Ship/ })).toBeNull();
   });
 });

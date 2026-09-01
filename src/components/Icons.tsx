@@ -33,3 +33,11 @@ export function ArrowIcon({ size = 18 }: IconProps) {
     </svg>
   );
 }
+
+export function ChevronIcon({ size = 18 }: IconProps) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" width={size} height={size}>
+      <path d="m7 9.5 5 5 5-5" />
+    </svg>
+  );
+}
