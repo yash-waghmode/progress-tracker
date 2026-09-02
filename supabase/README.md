@@ -1,7 +1,7 @@
 # Supabase setup
 
 The migration in `migrations/` creates the cloud tables and Row Level Security
-policies for Progress Tracker.
+policies for Stepmark.
 
 ## Apply through the dashboard
 

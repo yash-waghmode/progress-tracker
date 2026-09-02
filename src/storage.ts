@@ -1,7 +1,7 @@
 import type { Project, Task } from "./types";
 
-// Keep this key stable across schema versions so the development origin and key
-// remain the two durable coordinates for a user's data.
+// Keep this pre-Stepmark key stable so existing browser data and backup files
+// remain compatible across the product rename and future schema versions.
 export const STORAGE_KEY = "progress-tracker:projects";
 export const LEGACY_STORAGE_KEYS = ["minimal-progress-tracker:v1"] as const;
 

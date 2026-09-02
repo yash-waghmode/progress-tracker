@@ -85,7 +85,7 @@ export function AuthGate({ children }: AuthGateProps) {
     return (
       <main className="auth-shell">
         <section className="auth-card" aria-labelledby="auth-title">
-          <p className="eyebrow">Progress</p>
+          <p className="eyebrow">Stepmark</p>
           <h1 id="auth-title">Your progress, wherever you are.</h1>
           <p className="auth-intro">
             Enter your email and we’ll send you a secure sign-in link—no

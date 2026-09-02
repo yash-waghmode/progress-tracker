@@ -1,4 +1,4 @@
--- Cloud persistence for Progress Tracker.
+-- Cloud persistence for Stepmark.
 -- Every row belongs to an authenticated user and is protected by RLS.
 
 begin;

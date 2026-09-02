@@ -1,6 +1,7 @@
-# Progress
+# Stepmark
 
-A minimal, responsive project progress tracker. Create projects, add tasks, and watch completion update automatically as tasks are checked off.
+A minimal, responsive project progress tracker. Create projects, add tasks, and
+watch completion update automatically as tasks are checked off.
 
 Projects stay compact for an at-a-glance overview and expand one at a time for
 task editing. Overall progress is derived from all tasks; it is never stored as

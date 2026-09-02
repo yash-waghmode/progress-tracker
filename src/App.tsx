@@ -207,7 +207,7 @@ function App() {
     const link = document.createElement("a");
     const date = new Date().toISOString().slice(0, 10);
     link.href = url;
-    link.download = `progress-tracker-backup-${date}.json`;
+    link.download = `stepmark-backup-${date}.json`;
     link.click();
     URL.revokeObjectURL(url);
     setBackupStatus("Backup downloaded.");
@@ -221,7 +221,7 @@ function App() {
     try {
       const restoredProjects = parseProjectsBackup(await file.text());
       if (!restoredProjects) {
-        setBackupStatus("That file is not a valid Progress backup.");
+        setBackupStatus("That file is not a valid Stepmark backup.");
         return;
       }
 
@@ -283,7 +283,7 @@ function App() {
     <main className="page-shell">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Progress</p>
+          <p className="eyebrow">Stepmark</p>
           <h1>Make what matters move.</h1>
           <p className="intro">Small steps, clearly seen.</p>
         </div>
