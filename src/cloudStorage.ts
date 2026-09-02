@@ -1,0 +1,146 @@
+import { supabase } from "./supabase";
+import type { Project } from "./types";
+
+interface ProjectRow {
+  id: string;
+  name: string;
+  position: number;
+}
+
+interface TaskRow {
+  id: string;
+  project_id: string;
+  name: string;
+  completed: boolean;
+  position: number;
+}
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+  return "Cloud request failed.";
+}
+
+export function assembleProjects(
+  projectRows: ProjectRow[],
+  taskRows: TaskRow[],
+): Project[] {
+  const tasksByProject = new Map<string, Project["tasks"]>();
+
+  for (const task of taskRows) {
+    const tasks = tasksByProject.get(task.project_id) ?? [];
+    tasks.push({
+      id: task.id,
+      name: task.name,
+      completed: task.completed,
+    });
+    tasksByProject.set(task.project_id, tasks);
+  }
+
+  return projectRows.map((project) => ({
+    id: project.id,
+    name: project.name,
+    tasks: tasksByProject.get(project.id) ?? [],
+  }));
+}
+
+export async function loadCloudProjects(userId: string): Promise<Project[]> {
+  const [projectsResult, tasksResult] = await Promise.all([
+    supabase
+      .from("projects")
+      .select("id, name, position")
+      .eq("user_id", userId)
+      .order("position", { ascending: true }),
+    supabase
+      .from("tasks")
+      .select("id, project_id, name, completed, position")
+      .eq("user_id", userId)
+      .order("project_id", { ascending: true })
+      .order("position", { ascending: true }),
+  ]);
+
+  if (projectsResult.error) throw new Error(errorMessage(projectsResult.error));
+  if (tasksResult.error) throw new Error(errorMessage(tasksResult.error));
+
+  return assembleProjects(
+    (projectsResult.data ?? []) as ProjectRow[],
+    (tasksResult.data ?? []) as TaskRow[],
+  );
+}
+
+export async function saveCloudProjects(
+  projects: Project[],
+  userId: string,
+): Promise<void> {
+  const projectRows = projects.map((project, position) => ({
+    id: project.id,
+    user_id: userId,
+    name: project.name,
+    position,
+  }));
+  const taskRows = projects.flatMap((project) =>
+    project.tasks.map((task, position) => ({
+      id: task.id,
+      project_id: project.id,
+      user_id: userId,
+      name: task.name,
+      completed: task.completed,
+      position,
+    })),
+  );
+
+  if (projectRows.length > 0) {
+    const { error } = await supabase
+      .from("projects")
+      .upsert(projectRows, { onConflict: "id" });
+    if (error) throw new Error(errorMessage(error));
+  }
+
+  if (taskRows.length > 0) {
+    const { error } = await supabase
+      .from("tasks")
+      .upsert(taskRows, { onConflict: "id" });
+    if (error) throw new Error(errorMessage(error));
+  }
+
+  const [storedProjects, storedTasks] = await Promise.all([
+    supabase.from("projects").select("id").eq("user_id", userId),
+    supabase.from("tasks").select("id").eq("user_id", userId),
+  ]);
+  if (storedProjects.error) throw new Error(errorMessage(storedProjects.error));
+  if (storedTasks.error) throw new Error(errorMessage(storedTasks.error));
+
+  const projectIds = new Set(projectRows.map(({ id }) => id));
+  const taskIds = new Set(taskRows.map(({ id }) => id));
+  const staleTaskIds = (storedTasks.data ?? [])
+    .map(({ id }) => id)
+    .filter((id) => !taskIds.has(id));
+  const staleProjectIds = (storedProjects.data ?? [])
+    .map(({ id }) => id)
+    .filter((id) => !projectIds.has(id));
+
+  if (staleTaskIds.length > 0) {
+    const { error } = await supabase
+      .from("tasks")
+      .delete()
+      .eq("user_id", userId)
+      .in("id", staleTaskIds);
+    if (error) throw new Error(errorMessage(error));
+  }
+
+  if (staleProjectIds.length > 0) {
+    const { error } = await supabase
+      .from("projects")
+      .delete()
+      .eq("user_id", userId)
+      .in("id", staleProjectIds);
+    if (error) throw new Error(errorMessage(error));
+  }
+}

@@ -1,30 +1,130 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { useAuthSession } from "./authSession";
+import { loadCloudProjects, saveCloudProjects } from "./cloudStorage";
 import { ProjectCard } from "./components/ProjectCard";
 import { PlusIcon } from "./components/Icons";
 import { OverallProgress } from "./components/OverallProgress";
 import { createId } from "./id";
-import { loadProjects, saveProjects } from "./storage";
+import {
+  createProjectsBackup,
+  loadProjects,
+  parseProjectsBackup,
+  saveProjects,
+} from "./storage";
 import type { Project } from "./types";
 
 function App() {
-  const [projects, setProjects] = useState<Project[]>(loadProjects);
+  const session = useAuthSession();
+  const userId = session?.user.id;
+  const initialProjects = useRef<Project[]>(loadProjects());
+  const [projects, setProjects] = useState<Project[]>(initialProjects.current);
   const [projectName, setProjectName] = useState("");
   const [error, setError] = useState("");
   const [storageWarning, setStorageWarning] = useState(false);
+  const [backupStatus, setBackupStatus] = useState("");
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(
     null,
   );
   const [focusTaskInputId, setFocusTaskInputId] = useState<string | null>(null);
-  const hasUserChangedProjects = useRef(false);
+  const [cloudStatus, setCloudStatus] = useState<
+    "local" | "loading" | "ready" | "saving" | "error"
+  >(session ? "loading" : "local");
+  const [cloudError, setCloudError] = useState("");
+  const [cloudLoadAttempt, setCloudLoadAttempt] = useState(0);
+  const projectsRef = useRef(initialProjects.current);
+  const cloudReadyRef = useRef(false);
+  const cloudUserIdRef = useRef<string | null>(null);
+  const syncQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const latestSyncRef = useRef(0);
+  const restoreInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!hasUserChangedProjects.current) return;
-    setStorageWarning(!saveProjects(projects));
-  }, [projects]);
+    if (!userId) {
+      cloudReadyRef.current = false;
+      cloudUserIdRef.current = null;
+      setCloudStatus("local");
+      return;
+    }
+
+    let active = true;
+    cloudReadyRef.current = false;
+    cloudUserIdRef.current = userId;
+    syncQueueRef.current = Promise.resolve();
+    setCloudStatus("loading");
+    setCloudError("");
+
+    void loadCloudProjects(userId)
+      .then((cloudProjects) => {
+        if (!active || cloudUserIdRef.current !== userId) return;
+        projectsRef.current = cloudProjects;
+        setProjects(cloudProjects);
+        setStorageWarning(!saveProjects(cloudProjects));
+        cloudReadyRef.current = true;
+        setCloudStatus("ready");
+      })
+      .catch((loadError: unknown) => {
+        if (!active || cloudUserIdRef.current !== userId) return;
+        setCloudError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Your cloud projects could not be loaded.",
+        );
+        setCloudStatus("error");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [cloudLoadAttempt, userId]);
+
+  const queueCloudSync = (nextProjects: Project[]) => {
+    if (!userId || !cloudReadyRef.current) return;
+
+    const syncNumber = latestSyncRef.current + 1;
+    latestSyncRef.current = syncNumber;
+    setCloudStatus("saving");
+    setCloudError("");
+
+    syncQueueRef.current = syncQueueRef.current
+      .catch(() => undefined)
+      .then(() => saveCloudProjects(nextProjects, userId))
+      .then(() => {
+        if (
+          cloudUserIdRef.current === userId &&
+          latestSyncRef.current === syncNumber
+        ) {
+          setCloudStatus("ready");
+        }
+      })
+      .catch((syncError: unknown) => {
+        if (
+          cloudUserIdRef.current === userId &&
+          latestSyncRef.current === syncNumber
+        ) {
+          setCloudError(
+            syncError instanceof Error
+              ? syncError.message
+              : "Your latest changes could not be saved to the cloud.",
+          );
+          setCloudStatus("error");
+        }
+      });
+  };
 
   const updateProjects = (update: (current: Project[]) => Project[]) => {
-    hasUserChangedProjects.current = true;
-    setProjects(update);
+    const nextProjects = update(projectsRef.current);
+    projectsRef.current = nextProjects;
+    setProjects(nextProjects);
+    setStorageWarning(!saveProjects(nextProjects));
+    queueCloudSync(nextProjects);
+  };
+
+  const retryCloud = () => {
+    if (cloudReadyRef.current) {
+      queueCloudSync(projectsRef.current);
+    } else {
+      setCloudLoadAttempt((attempt) => attempt + 1);
+    }
   };
 
   const addProject = (event: FormEvent<HTMLFormElement>) => {
@@ -99,6 +199,86 @@ function App() {
     setFocusTaskInputId((current) => (current === projectId ? null : current));
   };
 
+  const downloadBackup = () => {
+    const blob = new Blob([createProjectsBackup(projects)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const date = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `progress-tracker-backup-${date}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setBackupStatus("Backup downloaded.");
+  };
+
+  const restoreBackup = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    try {
+      const restoredProjects = parseProjectsBackup(await file.text());
+      if (!restoredProjects) {
+        setBackupStatus("That file is not a valid Progress backup.");
+        return;
+      }
+
+      if (
+        projects.length > 0 &&
+        !window.confirm(
+          "Restore this backup? It will replace your projects on every device.",
+        )
+      ) {
+        setBackupStatus("Restore cancelled.");
+        return;
+      }
+
+      updateProjects(() => restoredProjects);
+      setExpandedProjectId(null);
+      setFocusTaskInputId(null);
+      setBackupStatus(
+        `Backup restored: ${restoredProjects.length} ${restoredProjects.length === 1 ? "project" : "projects"}.`,
+      );
+    } catch {
+      setBackupStatus("The backup could not be read.");
+    } finally {
+      input.value = "";
+    }
+  };
+
+  if (session && cloudStatus === "loading") {
+    return (
+      <main className="cloud-shell" aria-busy="true">
+        <p role="status">Loading your cloud projects…</p>
+      </main>
+    );
+  }
+
+  if (session && cloudStatus === "error" && !cloudReadyRef.current) {
+    return (
+      <main className="cloud-shell">
+        <section className="cloud-error" aria-labelledby="cloud-error-title">
+          <h1 id="cloud-error-title">We couldn’t open your cloud tracker.</h1>
+          <p role="alert">{cloudError}</p>
+          <button type="button" onClick={retryCloud}>
+            Try again
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  const cloudStatusLabel =
+    cloudStatus === "saving"
+      ? "Saving to cloud…"
+      : cloudStatus === "error"
+        ? "Cloud save needs retry"
+        : cloudStatus === "ready"
+          ? "Saved to cloud"
+          : "Saved on this device";
+
   return (
     <main className="page-shell">
       <header className="page-header">
@@ -150,6 +330,15 @@ function App() {
         </p>
       )}
 
+      {cloudStatus === "error" && cloudReadyRef.current && (
+        <div className="cloud-warning" role="alert">
+          <span>{cloudError}</span>
+          <button type="button" onClick={retryCloud}>
+            Retry cloud save
+          </button>
+        </div>
+      )}
+
       <OverallProgress projects={projects} />
 
       {projects.length === 0 ? (
@@ -190,13 +379,36 @@ function App() {
       )}
 
       <footer className="page-footer">
-        <span>
-          {projects.length === 0
-            ? "Ready when you are."
-            : `${projects.length} ${projects.length === 1 ? "project" : "projects"}`}
-        </span>
-        <span>Saved on this device</span>
+        <div className="page-footer__summary">
+          <span>
+            {projects.length === 0
+              ? "Ready when you are."
+              : `${projects.length} ${projects.length === 1 ? "project" : "projects"}`}
+          </span>
+          <span aria-live="polite">{cloudStatusLabel}</span>
+        </div>
+        <div className="backup-actions">
+          <button type="button" onClick={downloadBackup}>
+            Download backup
+          </button>
+          <button
+            type="button"
+            onClick={() => restoreInputRef.current?.click()}
+          >
+            Restore backup
+          </button>
+          <input
+            ref={restoreInputRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={restoreBackup}
+          />
+        </div>
       </footer>
+      <p className="backup-status" role="status" aria-live="polite">
+        {backupStatus}
+      </p>
     </main>
   );
 }

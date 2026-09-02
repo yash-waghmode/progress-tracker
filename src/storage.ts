@@ -14,6 +14,11 @@ interface StoredData {
   projects: Project[];
 }
 
+interface ProjectsBackup extends StoredData {
+  app: "progress-tracker";
+  exportedAt: string;
+}
+
 function isTask(value: unknown): value is Task {
   if (!value || typeof value !== "object") return false;
   const task = value as Record<string, unknown>;
@@ -103,5 +108,42 @@ export function saveProjects(
     return true;
   } catch {
     return false;
+  }
+}
+
+export function createProjectsBackup(
+  projects: Project[],
+  exportedAt = new Date(),
+): string {
+  const backup: ProjectsBackup = {
+    app: "progress-tracker",
+    version: 1,
+    exportedAt: exportedAt.toISOString(),
+    projects,
+  };
+
+  return JSON.stringify(backup, null, 2);
+}
+
+export function parseProjectsBackup(raw: string): Project[] | null {
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!value || typeof value !== "object") return null;
+
+    const backup = value as Partial<ProjectsBackup>;
+    if (
+      backup.app !== "progress-tracker" ||
+      backup.version !== 1 ||
+      typeof backup.exportedAt !== "string" ||
+      Number.isNaN(Date.parse(backup.exportedAt)) ||
+      !Array.isArray(backup.projects) ||
+      !backup.projects.every(isProject)
+    ) {
+      return null;
+    }
+
+    return backup.projects;
+  } catch {
+    return null;
   }
 }

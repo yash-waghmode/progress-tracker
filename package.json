@@ -13,6 +13,7 @@
     "format:write": "prettier --write ."
   },
   "dependencies": {
+    "@supabase/supabase-js": "2.113.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },

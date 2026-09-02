@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  createProjectsBackup,
   LEGACY_STORAGE_KEYS,
   loadProjects,
+  parseProjectsBackup,
   saveProjects,
   STORAGE_KEY,
 } from "./storage";
@@ -122,5 +124,44 @@ describe("project persistence", () => {
     };
 
     expect(loadProjects(storage)).toEqual(projects);
+  });
+});
+
+describe("project backups", () => {
+  it("exports and restores a versioned backup without data loss", () => {
+    const exportedAt = new Date("2026-09-02T10:30:00.000Z");
+    const backup = createProjectsBackup(projects, exportedAt);
+
+    expect(JSON.parse(backup)).toEqual({
+      app: "progress-tracker",
+      version: 1,
+      exportedAt: "2026-09-02T10:30:00.000Z",
+      projects,
+    });
+    expect(parseProjectsBackup(backup)).toEqual(projects);
+  });
+
+  it("rejects corrupt, unrelated, and partially malformed backups", () => {
+    expect(parseProjectsBackup("{broken")).toBeNull();
+    expect(
+      parseProjectsBackup(
+        JSON.stringify({
+          app: "another-app",
+          version: 1,
+          exportedAt: "2026-09-02T10:30:00.000Z",
+          projects,
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      parseProjectsBackup(
+        JSON.stringify({
+          app: "progress-tracker",
+          version: 1,
+          exportedAt: "2026-09-02T10:30:00.000Z",
+          projects: [...projects, { id: 2 }],
+        }),
+      ),
+    ).toBeNull();
   });
 });

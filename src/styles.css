@@ -76,6 +76,164 @@ button:disabled {
   border: 0;
 }
 
+.auth-shell {
+  display: grid;
+  min-height: 100vh;
+  padding: 28px 20px;
+  place-items: center;
+}
+
+.auth-card {
+  width: min(100%, 480px);
+  padding: clamp(28px, 6vw, 48px);
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(36, 32, 22, 0.09);
+}
+
+.auth-card h1 {
+  margin-bottom: 14px;
+  font-size: clamp(2rem, 7vw, 2.8rem);
+  white-space: normal;
+}
+
+.auth-intro {
+  margin-bottom: 28px;
+  color: var(--slate);
+  line-height: 1.6;
+}
+
+.auth-form {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-form label {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.auth-form input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  color: var(--ink);
+  background: #fbfaf7;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.auth-form button,
+.account-bar button {
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.auth-form button {
+  min-height: 48px;
+  margin-top: 4px;
+  color: #fff;
+  font-weight: 600;
+  background: var(--blue);
+  border: 0;
+}
+
+.auth-form button:hover:not(:disabled) {
+  background: var(--blue-dark);
+}
+
+.auth-form button:disabled {
+  opacity: 0.55;
+}
+
+.auth-message {
+  margin: 18px 0 0;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.auth-message--success {
+  color: #267447;
+}
+
+.auth-message--error {
+  color: var(--danger);
+}
+
+.auth-loading {
+  color: var(--slate);
+}
+
+.cloud-shell {
+  display: grid;
+  width: min(100% - 40px, 1040px);
+  min-height: calc(100vh - 38px);
+  margin: 0 auto;
+  color: var(--slate);
+  place-items: center;
+}
+
+.cloud-error {
+  width: min(100%, 480px);
+  padding: 32px;
+  text-align: center;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.cloud-error h1 {
+  margin-bottom: 12px;
+  color: var(--ink);
+  font-size: 1.5rem;
+  white-space: normal;
+}
+
+.cloud-error p {
+  line-height: 1.5;
+}
+
+.cloud-error button,
+.cloud-warning button {
+  min-height: 36px;
+  padding: 0 12px;
+  color: var(--blue-dark);
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: #f0f2ff;
+  border: 1px solid #cdd3f3;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.account-bar {
+  display: flex;
+  width: min(100% - 40px, 1040px);
+  min-height: 38px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 14px;
+  margin: 0 auto -28px;
+  color: var(--slate);
+  font-size: 0.76rem;
+}
+
+.account-bar button {
+  min-height: 32px;
+  padding: 0 10px;
+  color: var(--blue-dark);
+  font-size: 0.76rem;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid #cdd3f3;
+}
+
+.account-bar button:hover:not(:disabled) {
+  background: #eef1ff;
+}
+
 .page-shell {
   width: min(100% - 40px, 1040px);
   min-height: 100vh;
@@ -238,6 +396,20 @@ svg {
   margin: 18px 0 0;
   color: #765b1d;
   font-size: 0.86rem;
+  background: #fff9e9;
+  border: 1px solid #eee1bb;
+  border-radius: 8px;
+}
+
+.cloud-warning {
+  display: flex;
+  padding: 10px 12px 10px 14px;
+  margin: 18px 0 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  color: #765b1d;
+  font-size: 0.82rem;
   background: #fff9e9;
   border: 1px solid #eee1bb;
   border-radius: 8px;
@@ -726,10 +898,56 @@ svg {
 .page-footer {
   display: flex;
   padding-top: 15px;
+  align-items: center;
   justify-content: space-between;
+  gap: 20px;
   color: #7f7e79;
   font-size: 0.72rem;
   border-top: 1px solid #dfdcd4;
+}
+
+.page-footer__summary,
+.backup-actions {
+  display: flex;
+  align-items: center;
+}
+
+.page-footer__summary {
+  gap: 20px;
+}
+
+.backup-actions {
+  gap: 6px;
+}
+
+.backup-actions button {
+  min-height: 36px;
+  padding: 0 10px;
+  color: #666560;
+  font: inherit;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid #dcd9d2;
+  border-radius: 7px;
+  cursor: pointer;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    border-color 150ms ease;
+}
+
+.backup-actions button:hover {
+  color: var(--blue-dark);
+  background: #f0f2ff;
+  border-color: #cdd3f3;
+}
+
+.backup-status {
+  min-height: 1.2em;
+  margin: 8px 0 0;
+  color: #6f6e69;
+  font-size: 0.74rem;
+  text-align: right;
 }
 
 .print-project {
@@ -851,6 +1069,18 @@ svg {
 }
 
 @media (max-width: 430px) {
+  .account-bar {
+    width: calc(100% - 24px);
+    margin-bottom: -16px;
+  }
+
+  .account-bar > span:first-child {
+    max-width: 58vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .page-shell {
     width: calc(100% - 24px);
     padding-top: 24px;
@@ -923,7 +1153,27 @@ svg {
   }
 
   .page-footer {
-    gap: 20px;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .cloud-warning {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .page-footer__summary,
+  .backup-actions {
+    justify-content: space-between;
+  }
+
+  .backup-actions button {
+    flex: 1;
+  }
+
+  .backup-status {
+    text-align: left;
   }
 }
 
@@ -990,10 +1240,13 @@ svg {
 
   .project-form,
   .task-form,
+  .account-bar,
   .project-card__actions,
   .task-delete,
   .delete-confirm,
-  .storage-warning {
+  .storage-warning,
+  .backup-actions,
+  .backup-status {
     display: none !important;
   }
 

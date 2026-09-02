@@ -10,8 +10,12 @@ separate data.
 
 ```bash
 npm install
+cp .env.example .env.local
 npm run dev
 ```
+
+Fill `.env.local` with the Supabase project URL and publishable key before
+starting the app. Never use a secret or service-role key in a `VITE_` variable.
 
 Always open `http://127.0.0.1:5173/`. The development server is configured to
 use that host and port, and it will fail clearly if port 5173 is unavailable
@@ -32,20 +36,32 @@ npm run build
 - React and strict TypeScript, built with Vite
 - Small feature components for project cards and task rows
 - Pure progress helpers and defensive, versioned persistence helpers
+- Supabase magic-link authentication, Postgres persistence, and Row Level
+  Security that isolates every user's rows
 - CSS-only interaction and entrance animation, including reduced-motion support
-- No backend, runtime configuration, or UI framework
+- No UI framework
+
+## Cloud setup
+
+The versioned database migration and setup instructions are in
+[`supabase/`](supabase/README.md). After signing in, Supabase is the source of
+truth for projects and tasks. An empty cloud account intentionally replaces any
+old browser-only dummy data with a clean tracker.
 
 ## Persistence
 
-Projects and tasks are stored in the browser's `localStorage` under the stable
-key `progress-tracker:projects`. Data is restored on the next visit, older
-supported data is migrated, malformed entries are ignored safely, and deleting
-all projects stays deleted. If storage is unavailable, the current session
-continues to work and displays a non-blocking warning.
+Authenticated projects and tasks are loaded from and saved to Supabase, making
+them available after signing in on another device. Writes are serialized so
+rapid changes reach the cloud in order. The footer shows `Saving to cloud…`,
+`Saved to cloud`, or a retry action when a network request fails.
 
-Browser storage is specific to the exact origin and browser context. Always use
-`http://127.0.0.1:5173/`; data does not automatically transfer to `localhost`,
-another port, another browser profile, or a private-browsing session.
+The app also keeps a local safety cache under `progress-tracker:projects`. That
+cache makes recent state recoverable in the same browser, but cloud data remains
+authoritative after sign-in.
+
+Use **Download backup** in the footer to save all projects and tasks as a JSON
+file. **Restore backup** validates one of these files before replacing the cloud
+data associated with the signed-in account.
 
 ## Printing
 
