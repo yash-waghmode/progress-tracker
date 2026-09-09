@@ -12,6 +12,9 @@ import {
   saveProjects,
 } from "./storage";
 import type { Project } from "./types";
+import { MAX_COUNTER_TOTAL } from "./types";
+
+type ProjectType = "tasks" | "counter";
 
 function App() {
   const session = useAuthSession();
@@ -19,13 +22,18 @@ function App() {
   const initialProjects = useRef<Project[]>(loadProjects());
   const [projects, setProjects] = useState<Project[]>(initialProjects.current);
   const [projectName, setProjectName] = useState("");
+  const [projectType, setProjectType] = useState<ProjectType>("tasks");
+  const [counterTotal, setCounterTotal] = useState("");
+  const [counterUnit, setCounterUnit] = useState("");
   const [error, setError] = useState("");
   const [storageWarning, setStorageWarning] = useState(false);
   const [backupStatus, setBackupStatus] = useState("");
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(
     null,
   );
-  const [focusTaskInputId, setFocusTaskInputId] = useState<string | null>(null);
+  const [focusProjectControlId, setFocusProjectControlId] = useState<
+    string | null
+  >(null);
   const [cloudStatus, setCloudStatus] = useState<
     "local" | "loading" | "ready" | "saving" | "error"
   >(session ? "loading" : "local");
@@ -134,14 +142,40 @@ function App() {
       setError("Enter a project name.");
       return;
     }
+    const total = Number(counterTotal);
+    if (
+      projectType === "counter" &&
+      (!Number.isInteger(total) || total < 1 || total > MAX_COUNTER_TOTAL)
+    ) {
+      setError(
+        `Enter a total between 1 and ${MAX_COUNTER_TOTAL.toLocaleString()}.`,
+      );
+      return;
+    }
     const projectId = createId();
     updateProjects((current) => [
       ...current,
-      { id: projectId, name, tasks: [] },
+      {
+        id: projectId,
+        name,
+        tasks: [],
+        ...(projectType === "counter"
+          ? {
+              counter: {
+                completed: 0,
+                total,
+                unit: counterUnit.trim() || "items",
+              },
+            }
+          : {}),
+      },
     ]);
     setExpandedProjectId(projectId);
-    setFocusTaskInputId(projectId);
+    setFocusProjectControlId(projectId);
     setProjectName("");
+    setProjectType("tasks");
+    setCounterTotal("");
+    setCounterUnit("");
     setError("");
   };
 
@@ -149,12 +183,33 @@ function App() {
     updateProjects((current) =>
       current.map((project) =>
         project.id === projectId
+          ? project.counter
+            ? project
+            : {
+                ...project,
+                tasks: [
+                  ...project.tasks,
+                  { id: createId(), name, completed: false },
+                ],
+              }
+          : project,
+      ),
+    );
+  };
+
+  const updateCounter = (projectId: string, completed: number) => {
+    updateProjects((current) =>
+      current.map((project) =>
+        project.id === projectId && project.counter
           ? {
               ...project,
-              tasks: [
-                ...project.tasks,
-                { id: createId(), name, completed: false },
-              ],
+              counter: {
+                ...project.counter,
+                completed: Math.min(
+                  project.counter.total,
+                  Math.max(0, Math.round(completed)),
+                ),
+              },
             }
           : project,
       ),
@@ -196,7 +251,9 @@ function App() {
       current.filter((project) => project.id !== projectId),
     );
     setExpandedProjectId((current) => (current === projectId ? null : current));
-    setFocusTaskInputId((current) => (current === projectId ? null : current));
+    setFocusProjectControlId((current) =>
+      current === projectId ? null : current,
+    );
   };
 
   const downloadBackup = () => {
@@ -237,7 +294,7 @@ function App() {
 
       updateProjects(() => restoredProjects);
       setExpandedProjectId(null);
-      setFocusTaskInputId(null);
+      setFocusProjectControlId(null);
       setBackupStatus(
         `Backup restored: ${restoredProjects.length} ${restoredProjects.length === 1 ? "project" : "projects"}.`,
       );
@@ -289,6 +346,37 @@ function App() {
         </div>
 
         <form className="project-form" onSubmit={addProject} noValidate>
+          <fieldset className="project-type-toggle">
+            <legend className="sr-only">
+              How will you track this project?
+            </legend>
+            <label>
+              <input
+                type="radio"
+                name="project-type"
+                value="tasks"
+                checked={projectType === "tasks"}
+                onChange={() => {
+                  setProjectType("tasks");
+                  setError("");
+                }}
+              />
+              <span>Task list</span>
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="project-type"
+                value="counter"
+                checked={projectType === "counter"}
+                onChange={() => {
+                  setProjectType("counter");
+                  setError("");
+                }}
+              />
+              <span>Number goal</span>
+            </label>
+          </fieldset>
           <div className="project-input-wrap">
             <label className="sr-only" htmlFor="project-name">
               Project name
@@ -308,13 +396,52 @@ function App() {
             <button
               type="submit"
               className="primary-button"
-              disabled={!projectName.trim()}
+              disabled={
+                !projectName.trim() ||
+                (projectType === "counter" &&
+                  (!Number.isInteger(Number(counterTotal)) ||
+                    Number(counterTotal) < 1 ||
+                    Number(counterTotal) > MAX_COUNTER_TOTAL))
+              }
               title="Add project"
             >
               <PlusIcon />
               <span>Add project</span>
             </button>
           </div>
+          {projectType === "counter" && (
+            <div className="counter-setup">
+              <div>
+                <label htmlFor="counter-total">Total</label>
+                <input
+                  id="counter-total"
+                  type="number"
+                  min="1"
+                  max={MAX_COUNTER_TOTAL}
+                  step="1"
+                  inputMode="numeric"
+                  value={counterTotal}
+                  onChange={(event) => {
+                    setCounterTotal(event.target.value);
+                    if (error) setError("");
+                  }}
+                  placeholder="20"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="counter-unit">Unit (optional)</label>
+                <input
+                  id="counter-unit"
+                  value={counterUnit}
+                  onChange={(event) => setCounterUnit(event.target.value)}
+                  placeholder="chapters"
+                  maxLength={40}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+          )}
           {error && (
             <p className="input-error" id="project-error" role="alert">
               {error}
@@ -350,8 +477,7 @@ function App() {
           </div>
           <h2 id="empty-title">A clear place to begin.</h2>
           <p>
-            Name your first project above, then break it into a few doable
-            tasks.
+            Name your first project above, then track tasks or a simple number.
           </p>
         </section>
       ) : (
@@ -362,16 +488,17 @@ function App() {
               project={project}
               index={index}
               isExpanded={expandedProjectId === project.id}
-              shouldFocusTaskInput={focusTaskInputId === project.id}
+              shouldFocusInput={focusProjectControlId === project.id}
               onToggleExpanded={() =>
                 setExpandedProjectId((current) =>
                   current === project.id ? null : project.id,
                 )
               }
-              onTaskInputFocused={() => setFocusTaskInputId(null)}
+              onInputFocused={() => setFocusProjectControlId(null)}
               onAddTask={addTask}
               onToggleTask={toggleTask}
               onDeleteTask={deleteTask}
+              onUpdateCounter={updateCounter}
               onDeleteProject={deleteProject}
             />
           ))}

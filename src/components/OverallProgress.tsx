@@ -9,7 +9,10 @@ interface OverallProgressProps {
 export function OverallProgress({ projects }: OverallProgressProps) {
   const { completed, total, percentage } = calculateOverallProgress(projects);
   const displayedPercentage = useAnimatedNumber(percentage);
-  const description = `${percentage}% complete, ${completed} of ${total} tasks complete`;
+  const itemLabel = projects.some((project) => project.counter)
+    ? "steps"
+    : "tasks";
+  const description = `${percentage}% complete, ${completed} of ${total} ${itemLabel} complete`;
 
   return (
     <section className="overall-progress" aria-labelledby="overall-title">
@@ -21,7 +24,7 @@ export function OverallProgress({ projects }: OverallProgressProps) {
           </span>
         </div>
         <p>
-          {completed} of {total} tasks complete
+          {completed} of {total} {itemLabel} complete
         </p>
       </div>
       <div

@@ -29,6 +29,15 @@ const projects: Project[] = [
   },
 ];
 
+const counterProjects: Project[] = [
+  {
+    id: "study-os",
+    name: "Study OS",
+    tasks: [],
+    counter: { completed: 7, total: 20, unit: "chapters" },
+  },
+];
+
 describe("project persistence", () => {
   it("saves and restores project data", () => {
     const storage = new MemoryStorage();
@@ -51,7 +60,7 @@ describe("project persistence", () => {
 
     expect(loadProjects(storage)).toEqual(projects);
     expect(JSON.parse(storage.getItem(STORAGE_KEY) ?? "null")).toEqual({
-      version: 1,
+      version: 2,
       projects,
     });
   });
@@ -62,7 +71,7 @@ describe("project persistence", () => {
 
     expect(loadProjects(storage)).toEqual(projects);
     expect(JSON.parse(storage.getItem(STORAGE_KEY) ?? "null")).toEqual({
-      version: 1,
+      version: 2,
       projects,
     });
   });
@@ -125,6 +134,33 @@ describe("project persistence", () => {
 
     expect(loadProjects(storage)).toEqual(projects);
   });
+
+  it("saves and restores number-based projects", () => {
+    const storage = new MemoryStorage();
+    expect(saveProjects(counterProjects, storage)).toBe(true);
+    expect(loadProjects(storage)).toEqual(counterProjects);
+  });
+
+  it("rejects malformed number goals", () => {
+    const storage = new MemoryStorage();
+    storage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 2,
+        projects: [
+          ...counterProjects,
+          {
+            id: "invalid",
+            name: "Invalid counter",
+            tasks: [],
+            counter: { completed: 21, total: 20, unit: "chapters" },
+          },
+        ],
+      }),
+    );
+
+    expect(loadProjects(storage)).toEqual(counterProjects);
+  });
 });
 
 describe("project backups", () => {
@@ -134,11 +170,24 @@ describe("project backups", () => {
 
     expect(JSON.parse(backup)).toEqual({
       app: "progress-tracker",
-      version: 1,
+      version: 2,
       exportedAt: "2026-09-02T10:30:00.000Z",
       projects,
     });
     expect(parseProjectsBackup(backup)).toEqual(projects);
+  });
+
+  it("restores version 1 task backups", () => {
+    expect(
+      parseProjectsBackup(
+        JSON.stringify({
+          app: "progress-tracker",
+          version: 1,
+          exportedAt: "2026-09-02T10:30:00.000Z",
+          projects,
+        }),
+      ),
+    ).toEqual(projects);
   });
 
   it("rejects corrupt, unrelated, and partially malformed backups", () => {

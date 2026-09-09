@@ -1,20 +1,25 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAnimatedNumber } from "../hooks/useAnimatedNumber";
-import { calculateProgress, getCompletedCount } from "../progress";
+import {
+  calculateProjectProgress,
+  getProjectCompleted,
+  getProjectTotal,
+} from "../progress";
 import type { Project } from "../types";
-import { ChevronIcon, PlusIcon, TrashIcon } from "./Icons";
+import { ChevronIcon, MinusIcon, PlusIcon, TrashIcon } from "./Icons";
 import { TaskItem } from "./TaskItem";
 
 interface ProjectCardProps {
   project: Project;
   index: number;
   isExpanded: boolean;
-  shouldFocusTaskInput: boolean;
+  shouldFocusInput: boolean;
   onToggleExpanded: () => void;
-  onTaskInputFocused: () => void;
+  onInputFocused: () => void;
   onAddTask: (projectId: string, name: string) => void;
   onToggleTask: (projectId: string, taskId: string) => void;
   onDeleteTask: (projectId: string, taskId: string) => void;
+  onUpdateCounter: (projectId: string, completed: number) => void;
   onDeleteProject: (projectId: string) => void;
 }
 
@@ -22,12 +27,13 @@ export function ProjectCard({
   project,
   index,
   isExpanded,
-  shouldFocusTaskInput,
+  shouldFocusInput,
   onToggleExpanded,
-  onTaskInputFocused,
+  onInputFocused,
   onAddTask,
   onToggleTask,
   onDeleteTask,
+  onUpdateCounter,
   onDeleteProject,
 }: ProjectCardProps) {
   const [taskName, setTaskName] = useState("");
@@ -35,18 +41,26 @@ export function ProjectCard({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
   const taskInputRef = useRef<HTMLInputElement>(null);
-  const completed = getCompletedCount(project.tasks);
-  const progress = calculateProgress(project.tasks);
+  const counterInputRef = useRef<HTMLInputElement>(null);
+  const completed = getProjectCompleted(project);
+  const total = getProjectTotal(project);
+  const progress = calculateProjectProgress(project);
+  const unit = project.counter?.unit ?? "tasks";
   const previousProgress = useRef(progress);
   const displayedProgress = useAnimatedNumber(progress);
   const bodyId = `project-body-${project.id}`;
 
   useEffect(() => {
-    if (isExpanded && shouldFocusTaskInput) {
-      taskInputRef.current?.focus();
-      onTaskInputFocused();
+    if (isExpanded && shouldFocusInput) {
+      if (project.counter) {
+        counterInputRef.current?.focus();
+        counterInputRef.current?.select();
+      } else {
+        taskInputRef.current?.focus();
+      }
+      onInputFocused();
     }
-  }, [isExpanded, onTaskInputFocused, shouldFocusTaskInput]);
+  }, [isExpanded, onInputFocused, project.counter, shouldFocusInput]);
 
   useEffect(() => {
     if (progress === 100 && previousProgress.current < 100) {
@@ -71,12 +85,21 @@ export function ProjectCard({
   };
 
   const requestDelete = () => {
-    if (project.tasks.length === 0) {
+    if (total === 0) {
       onDeleteProject(project.id);
       return;
     }
     setConfirmingDelete(true);
   };
+
+  const updateCounterFromInput = (value: string) => {
+    if (!project.counter) return;
+    const nextValue = Number(value);
+    if (!Number.isFinite(nextValue)) return;
+    onUpdateCounter(project.id, nextValue);
+  };
+
+  const progressDescription = `${progress}% complete, ${completed} of ${total} ${unit} complete`;
 
   return (
     <article
@@ -96,7 +119,7 @@ export function ProjectCard({
             <span className="sr-only">{progress}% complete</span>
           </span>
           <span className="progress-count">
-            {completed} of {project.tasks.length} tasks
+            {completed} of {total} {unit}
           </span>
         </div>
 
@@ -132,10 +155,10 @@ export function ProjectCard({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={progress}
-          aria-valuetext={`${progress}% complete, ${completed} of ${project.tasks.length} tasks complete`}
+          aria-valuetext={progressDescription}
         >
           <span
-            className={`progress-fill ${progress === 100 && project.tasks.length > 0 ? "progress-fill--complete" : ""}`}
+            className={`progress-fill ${progress === 100 && total > 0 ? "progress-fill--complete" : ""}`}
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -147,7 +170,11 @@ export function ProjectCard({
           role="group"
           aria-label={`Confirm deletion of ${project.name}`}
         >
-          <span>Delete this project and its {project.tasks.length} tasks?</span>
+          <span>
+            {project.counter
+              ? `Delete this number goal of ${total} ${unit}?`
+              : `Delete this project and its ${total} tasks?`}
+          </span>
           <div>
             <button
               type="button"
@@ -174,62 +201,113 @@ export function ProjectCard({
         inert={!isExpanded}
       >
         <div className="project-card__body-inner">
-          <form className="task-form" onSubmit={submitTask} noValidate>
-            <div className="input-wrap">
-              <label className="sr-only" htmlFor={`task-${project.id}`}>
-                Add a task to {project.name}
-              </label>
-              <input
-                ref={taskInputRef}
-                id={`task-${project.id}`}
-                value={taskName}
-                onChange={(event) => {
-                  setTaskName(event.target.value);
-                  if (error) setError("");
-                }}
-                placeholder="Add a task"
-                autoComplete="off"
-                aria-describedby={
-                  error ? `task-error-${project.id}` : undefined
-                }
-                aria-invalid={Boolean(error)}
-              />
-              <button
-                type="submit"
-                className="task-submit"
-                aria-label={`Add task to ${project.name}`}
-                disabled={!taskName.trim()}
-              >
-                <PlusIcon size={16} />
-                <span>Add</span>
-              </button>
-            </div>
-            {error && (
+          {project.counter ? (
+            <div className="counter-control">
+              <p>Update completed {unit}</p>
+              <div className="counter-control__stepper">
+                <button
+                  type="button"
+                  onClick={() => onUpdateCounter(project.id, completed - 1)}
+                  disabled={completed === 0}
+                  aria-label={`Decrease completed ${unit} for ${project.name}`}
+                >
+                  <MinusIcon />
+                </button>
+                <label>
+                  <span className="sr-only">
+                    Completed {unit} for {project.name}
+                  </span>
+                  <input
+                    ref={counterInputRef}
+                    type="number"
+                    min="0"
+                    max={total}
+                    step="1"
+                    inputMode="numeric"
+                    value={completed}
+                    onChange={(event) =>
+                      updateCounterFromInput(event.target.value)
+                    }
+                    aria-describedby={`counter-limit-${project.id}`}
+                  />
+                </label>
+                <span aria-hidden="true">of {total}</span>
+                <button
+                  type="button"
+                  onClick={() => onUpdateCounter(project.id, completed + 1)}
+                  disabled={completed === total}
+                  aria-label={`Increase completed ${unit} for ${project.name}`}
+                >
+                  <PlusIcon />
+                </button>
+              </div>
               <p
-                className="input-error"
-                id={`task-error-${project.id}`}
-                role="alert"
+                className="counter-control__hint"
+                id={`counter-limit-${project.id}`}
               >
-                {error}
+                Enter any number from 0 to {total}.
               </p>
-            )}
-          </form>
-
-          {project.tasks.length === 0 ? (
-            <p className="project-empty">
-              Add your first task to start making progress.
-            </p>
+            </div>
           ) : (
-            <ul className="task-list">
-              {project.tasks.map((task) => (
-                <TaskItem
-                  key={task.id}
-                  task={task}
-                  onToggle={() => onToggleTask(project.id, task.id)}
-                  onDelete={() => onDeleteTask(project.id, task.id)}
-                />
-              ))}
-            </ul>
+            <>
+              <form className="task-form" onSubmit={submitTask} noValidate>
+                <div className="input-wrap">
+                  <label className="sr-only" htmlFor={`task-${project.id}`}>
+                    Add a task to {project.name}
+                  </label>
+                  <input
+                    ref={taskInputRef}
+                    id={`task-${project.id}`}
+                    value={taskName}
+                    onChange={(event) => {
+                      setTaskName(event.target.value);
+                      if (error) setError("");
+                    }}
+                    placeholder="Add a task"
+                    autoComplete="off"
+                    aria-describedby={
+                      error ? `task-error-${project.id}` : undefined
+                    }
+                    aria-invalid={Boolean(error)}
+                  />
+                  <button
+                    type="submit"
+                    className="task-submit"
+                    aria-label={`Add task to ${project.name}`}
+                    disabled={!taskName.trim()}
+                  >
+                    <PlusIcon size={16} />
+                    <span>Add</span>
+                  </button>
+                </div>
+                {error && (
+                  <p
+                    className="input-error"
+                    id={`task-error-${project.id}`}
+                    role="alert"
+                  >
+                    {error}
+                  </p>
+                )}
+              </form>
+
+              {project.tasks.length === 0 ? (
+                <p className="project-empty">
+                  Add your first task to start making progress.
+                </p>
+              ) : (
+                <ul className="task-list">
+                  {project.tasks.map((task) => (
+                    <TaskItem
+                      key={task.id}
+                      task={task}
+                      onToggle={() => onToggleTask(project.id, task.id)}
+                      onDelete={() => onDeleteTask(project.id, task.id)}
+                    />
+                  ))}
+                </ul>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -241,12 +319,12 @@ export function ProjectCard({
               <div className="print-project__heading">
                 <span>{project.name}</span>
                 <span>
-                  {progress}% · {completed} of {project.tasks.length} tasks
+                  {progress}% · {completed} of {total} {unit}
                 </span>
               </div>
               <div className="progress-track">
                 <span
-                  className={`progress-fill ${progress === 100 && project.tasks.length > 0 ? "progress-fill--complete" : ""}`}
+                  className={`progress-fill ${progress === 100 && total > 0 ? "progress-fill--complete" : ""}`}
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -254,7 +332,13 @@ export function ProjectCard({
           </tr>
         </thead>
         <tbody>
-          {project.tasks.length === 0 ? (
+          {project.counter ? (
+            <tr>
+              <td>
+                {completed} {unit} completed · {total - completed} remaining
+              </td>
+            </tr>
+          ) : project.tasks.length === 0 ? (
             <tr>
               <td className="print-project__empty">No tasks yet.</td>
             </tr>

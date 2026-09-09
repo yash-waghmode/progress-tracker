@@ -10,6 +10,14 @@ export function PlusIcon({ size = 18 }: IconProps) {
   );
 }
 
+export function MinusIcon({ size = 18 }: IconProps) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" width={size} height={size}>
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
 export function TrashIcon({ size = 17 }: IconProps) {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" width={size} height={size}>

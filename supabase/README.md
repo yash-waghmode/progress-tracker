@@ -1,18 +1,19 @@
 # Supabase setup
 
-The migration in `migrations/` creates the cloud tables and Row Level Security
-policies for Stepmark.
+The migrations in `migrations/` create the cloud tables, Row Level Security
+policies, and project tracking modes for Stepmark.
 
 ## Apply through the dashboard
 
 1. Create a Supabase project.
 2. Open **SQL Editor** and create a new query.
-3. Paste the complete contents of
-   `migrations/20260902113000_initial_schema.sql` into the query.
-4. Select **Run** once.
+3. For a new database, paste each migration into a separate query in filename
+   order. For an existing Stepmark database, use only migrations that have not
+   already been applied.
+4. Select **Run** once for each pending migration. Number goals require
+   `20260909144417_add_counter_projects.sql`.
 
-The migration is intended for a new project. Do not run it a second time after
-it succeeds.
+Do not run a migration a second time after it succeeds.
 
 ## Application settings
 

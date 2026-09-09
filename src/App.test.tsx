@@ -302,6 +302,48 @@ describe("progress and controls", () => {
     await user.type(taskInput, "A real task");
     expect((taskSubmit as HTMLButtonElement).disabled).toBe(false);
   });
+
+  it("creates and updates a number-based project without named tasks", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByLabelText("Number goal"));
+    await user.type(screen.getByLabelText("Project name"), "Study OS");
+    await user.type(screen.getByLabelText("Total"), "20");
+    await user.type(screen.getByLabelText("Unit (optional)"), "chapters");
+    await user.click(screen.getByRole("button", { name: "Add project" }));
+
+    expect(screen.getByText("0 of 20 chapters")).toBeTruthy();
+    const completedInput = screen.getByLabelText(
+      "Completed chapters for Study OS",
+    );
+    expect(document.activeElement).toBe(completedInput);
+    expect(screen.queryByLabelText("Add a task to Study OS")).toBeNull();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Increase completed chapters for Study OS",
+      }),
+    );
+    expect(screen.getByText("1 of 20 chapters")).toBeTruthy();
+
+    fireEvent.change(completedInput, { target: { value: "7" } });
+    expect(screen.getByText("7 of 20 chapters")).toBeTruthy();
+    expect(overallProgress().getAttribute("aria-valuenow")).toBe("35");
+    expect(overallProgress().getAttribute("aria-valuetext")).toBe(
+      "35% complete, 7 of 20 steps complete",
+    );
+    expect(JSON.parse(storage.getItem(STORAGE_KEY) ?? "null")).toMatchObject({
+      version: 2,
+      projects: [
+        {
+          name: "Study OS",
+          tasks: [],
+          counter: { completed: 7, total: 20, unit: "chapters" },
+        },
+      ],
+    });
+  });
 });
 
 describe("persistence regressions", () => {

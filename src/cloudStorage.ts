@@ -5,6 +5,10 @@ interface ProjectRow {
   id: string;
   name: string;
   position: number;
+  tracking_mode?: "tasks" | "counter";
+  target_total?: number | null;
+  current_value?: number | null;
+  unit_label?: string | null;
 }
 
 interface TaskRow {
@@ -44,10 +48,38 @@ export function assembleProjects(
     tasksByProject.set(task.project_id, tasks);
   }
 
-  return projectRows.map((project) => ({
+  return projectRows.map((project) => {
+    const counter =
+      project.tracking_mode === "counter" &&
+      typeof project.target_total === "number" &&
+      typeof project.current_value === "number" &&
+      typeof project.unit_label === "string"
+        ? {
+            total: project.target_total,
+            completed: project.current_value,
+            unit: project.unit_label,
+          }
+        : undefined;
+
+    return {
+      id: project.id,
+      name: project.name,
+      tasks: counter ? [] : (tasksByProject.get(project.id) ?? []),
+      ...(counter ? { counter } : {}),
+    };
+  });
+}
+
+export function createProjectRows(projects: Project[], userId: string) {
+  return projects.map((project, position) => ({
     id: project.id,
+    user_id: userId,
     name: project.name,
-    tasks: tasksByProject.get(project.id) ?? [],
+    position,
+    tracking_mode: project.counter ? "counter" : "tasks",
+    target_total: project.counter?.total ?? null,
+    current_value: project.counter?.completed ?? null,
+    unit_label: project.counter?.unit ?? null,
   }));
 }
 
@@ -55,7 +87,9 @@ export async function loadCloudProjects(userId: string): Promise<Project[]> {
   const [projectsResult, tasksResult] = await Promise.all([
     supabase
       .from("projects")
-      .select("id, name, position")
+      .select(
+        "id, name, position, tracking_mode, target_total, current_value, unit_label",
+      )
       .eq("user_id", userId)
       .order("position", { ascending: true }),
     supabase
@@ -79,21 +113,18 @@ export async function saveCloudProjects(
   projects: Project[],
   userId: string,
 ): Promise<void> {
-  const projectRows = projects.map((project, position) => ({
-    id: project.id,
-    user_id: userId,
-    name: project.name,
-    position,
-  }));
+  const projectRows = createProjectRows(projects, userId);
   const taskRows = projects.flatMap((project) =>
-    project.tasks.map((task, position) => ({
-      id: task.id,
-      project_id: project.id,
-      user_id: userId,
-      name: task.name,
-      completed: task.completed,
-      position,
-    })),
+    project.counter
+      ? []
+      : project.tasks.map((task, position) => ({
+          id: task.id,
+          project_id: project.id,
+          user_id: userId,
+          name: task.name,
+          completed: task.completed,
+          position,
+        })),
   );
 
   if (projectRows.length > 0) {

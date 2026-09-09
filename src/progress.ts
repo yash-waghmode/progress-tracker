@@ -9,6 +9,20 @@ export function calculateProgress(tasks: Task[]): number {
   return Math.round((getCompletedCount(tasks) / tasks.length) * 100);
 }
 
+export function getProjectCompleted(project: Project): number {
+  return project.counter?.completed ?? getCompletedCount(project.tasks);
+}
+
+export function getProjectTotal(project: Project): number {
+  return project.counter?.total ?? project.tasks.length;
+}
+
+export function calculateProjectProgress(project: Project): number {
+  const total = getProjectTotal(project);
+  if (total === 0) return 0;
+  return Math.round((getProjectCompleted(project) / total) * 100);
+}
+
 export interface OverallProgress {
   completed: number;
   total: number;
@@ -18,8 +32,8 @@ export interface OverallProgress {
 export function calculateOverallProgress(projects: Project[]): OverallProgress {
   const totals = projects.reduce(
     (summary, project) => ({
-      completed: summary.completed + getCompletedCount(project.tasks),
-      total: summary.total + project.tasks.length,
+      completed: summary.completed + getProjectCompleted(project),
+      total: summary.total + getProjectTotal(project),
     }),
     { completed: 0, total: 0 },
   );

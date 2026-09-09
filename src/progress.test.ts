@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateOverallProgress,
+  calculateProjectProgress,
   calculateProgress,
   getCompletedCount,
 } from "./progress";
@@ -26,6 +27,17 @@ describe("project progress", () => {
 
   it("returns one hundred when every task is complete", () => {
     expect(calculateProgress([task(true), task(true)])).toBe(100);
+  });
+
+  it("calculates progress for a number-based project", () => {
+    expect(
+      calculateProjectProgress({
+        id: "study-os",
+        name: "Study OS",
+        tasks: [],
+        counter: { completed: 7, total: 20, unit: "chapters" },
+      }),
+    ).toBe(35);
   });
 });
 
@@ -80,5 +92,19 @@ describe("overall progress", () => {
     ];
 
     expect(calculateOverallProgress(projects).percentage).toBe(67);
+  });
+
+  it("combines task and number-based projects by their tracked totals", () => {
+    expect(
+      calculateOverallProgress([
+        { id: "tasks", name: "Tasks", tasks: [task(true), task(false)] },
+        {
+          id: "counter",
+          name: "Study OS",
+          tasks: [],
+          counter: { completed: 3, total: 8, unit: "chapters" },
+        },
+      ]),
+    ).toEqual({ completed: 4, total: 10, percentage: 40 });
   });
 });
